@@ -123,7 +123,7 @@ def extract():
             if not new_links_found:
                 return jsonify({'message': 'All links have been visited'}), 200
 
-            # Simpan ke database dan handle duplikasi jika perlu
+            # Simpan ke database
             try:
                 for data in extracted_info:
                     new_data = ExtractedData(url=data['url'], keyword=data['keyword'], content=data['full_text'])
@@ -173,6 +173,7 @@ def classify_sentiment(sentence):
     else:
         return 'negative'
     
+# Fungsi untuk membersihkan element tidak penting   
 def clean_text(text, min_sentence_length=40):
     # Menghilangkan URL
     text = re.sub(r'http\S+', '', text)
