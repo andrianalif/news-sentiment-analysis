@@ -172,31 +172,44 @@ def classify_sentiment(sentence):
         return 'positive'
     else:
         return 'negative'
-    
-# Fungsi untuk membersihkan element tidak penting   
+
 def clean_text(text, min_sentence_length=40):
+    # Identifikasi dan hilangkan teks di antara tag HTML khusus
+    title_match = re.search(r'<title[^>]*>(.*?)<\/title>', text, re.IGNORECASE | re.DOTALL)
+    script_match = re.search(r'<script[^>]*>(.*?)<\/script>', text, re.IGNORECASE | re.DOTALL)
+
+    if title_match:
+        title_text = title_match.group(1)
+        text = text.replace(title_text, '')
+
+    if script_match:
+        script_text = script_match.group(1)
+        text = text.replace(script_text, '')
+
+    # Menghilangkan kata yang berada di depan ".com" dan ".com" itu sendiri
+    text = re.sub(r'\b\S+\.com\b|\b\S+\b(?=\s*\.com)', '', text)
+
     # Menghilangkan URL
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'www\S+', '', text)
-    
+    text = re.sub(r'http\S+|www\S+', '', text)
+
     # Menghilangkan kata-kata yang tidak diinginkan
     unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT']
     for phrase in unwanted_phrases:
         text = text.replace(phrase, '')
-    
+
     # Menghilangkan karakter non-alfabetik kecuali tanda baca penting
     text = re.sub(r'[^a-zA-Z0-9.,;!?\'\`]', ' ', text)
-    
-    # Mengganti whitespace berlebih dengan satu spasi
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Menghapus kalimat yang terlalu pendek yang mungkin tidak penting
-    sentences = nltk.tokenize.sent_tokenize(text)
-    sentences = [s for s in sentences if len(s) > min_sentence_length]
-    text = ' '.join(sentences)
-    
-    return text
 
+    # Tokenisasi kalimat
+    sentences = nltk.tokenize.sent_tokenize(text)
+
+    # Menghapus kalimat yang terlalu pendek yang mungkin tidak penting
+    sentences = [s for s in sentences if len(s) > min_sentence_length]
+
+    # Mengganti whitespace berlebih dengan satu spasi
+    cleaned_text = ' '.join(sentences)
+
+    return cleaned_text
 
 @app.route('/download_sentence_sentiments', methods=['GET', 'POST'])
 def download_sentence_sentiments():
