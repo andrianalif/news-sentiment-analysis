@@ -54,7 +54,7 @@ def home():
                         </div>
                         <button type="submit" class="analyze" formaction="/extract">Extract</button>
                     </form>
-                    <form id="mainForm2" method="get>
+                    <form id="mainForm2" method="get">
                         <button type="submit" class="download" formaction="/download_sentence_sentiments">Download</button>
                     </form>
                 </div>
