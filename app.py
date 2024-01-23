@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from io import StringIO
 from collections import Counter
-from textblob import TextBlob
+from textblob import TextBlob 
 import requests
 import re
 import csv
@@ -167,7 +167,7 @@ def classify_sentiment(sentence):
     analysis = TextBlob(sentence)
     polarity = analysis.sentiment.polarity
     # Tentukan ambang batas di mana di atasnya dianggap positif(1) dan di bawahnya negatif(-1)
-    threshold = 0
+    threshold = 0.1
     if polarity >= threshold:
         return 'positive'
     else:
