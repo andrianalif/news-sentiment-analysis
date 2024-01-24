@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extracted Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 20px;
+        }
+        strong {
+            color: #333;
+        }
+        p {
+            margin-top: 10px;
+            color: #888;
+        }
+        .error {
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extracted Data</h1>
+
+    {% if extracted_info %}
+        <h2>Extracted Information</h2>
+        <ul>
+            {% for info in extracted_info %}
+                <li>
+                    <strong>URL:</strong> <a href="{{ info.url }}" target="_blank">{{ info.url }}</a><br>
+                    <strong>Text:</strong> {{ info.text }}<br>
+                    <strong>Full Text:</strong> {{ info.full_text }}<br>
+                    <strong>Keyword:</strong> {{ info.keyword }}<br><br>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if links_visited %}
+        <p>Number of links visited: {{ links_visited }}</p>
+    {% endif %}
+
+    {% if error %}
+        <p class="error">Error: {{ error }}</p>
+    {% endif %}
+</body>
+</html>

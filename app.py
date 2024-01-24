@@ -10,7 +10,7 @@ import re
 import csv
 import nltk
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///extract.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -96,6 +96,7 @@ def extract():
             extracted_info = []
             links_visited = 0  # Inisialisasi penghitung link
             new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
+            error = None
 
             for keyword in keywords:  # Iterasi melalui setiap kata kunci
                 links = soup.find_all('a', href=True)
@@ -139,9 +140,16 @@ def extract():
                 'links_visited': links_visited
             })
     except requests.exceptions.MissingSchema:
-        return jsonify({'error': 'Invalid URL scheme provided.'}), 400
+        error = 'Invalid URL scheme provided.'
+        return jsonify({'error': error}), 400
     except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'Failed to retrieve content from the URL: {e}'}), 400
+        error = f'Failed to retrieve content from the URL: {e}'
+        return jsonify({'error': error}), 400
+    except Exception as e:
+        error = str(e)
+        return jsonify({'error': error}), 500
+    
+    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited, error=error)
     
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
@@ -167,7 +175,7 @@ def classify_sentiment(sentence):
     analysis = TextBlob(sentence)
     polarity = analysis.sentiment.polarity
     # Tentukan ambang batas di mana di atasnya dianggap positif(1) dan di bawahnya negatif(-1)
-    threshold = 0.1
+    threshold = 0.01
     if polarity >= threshold:
         return 'positive'
     else:
