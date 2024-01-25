@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Sentiment Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="wrapper">
+        <div class="box">
+            <img src="{{ url_for('static', filename='pama.png') }}" alt="Logo" class="logo">
+            <h1 class="unselectable">News Sentiment Analysis</h1>
+            <form id="mainForm" method="post">
+                <div class="news-url">
+                    <label for="url">News URL:</label>
+                    <input type="text" id="url" name="url" required>
+                    <label for="keyword">Keyword:</label>
+                    <input type="text" id="keyword" name="keyword" required>
+                </div>
+                <button type="submit" class="analyze" formaction="/extract">Extract</button>
+            </form>
+            <form id="mainForm2" method="get">
+                <button type="submit" class="download" formaction="/download_sentence_sentiments">Download</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function setActionAndSubmit(action) {
+        var form = document.getElementById('mainForm');
+        form.action = action;
+        form.submit();
+    }
+    </script>
+</body>
+</html>

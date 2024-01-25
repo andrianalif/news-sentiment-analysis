@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, render_template_string, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -31,45 +31,7 @@ with app.app_context():
     
 @app.route('/', methods=['GET'])
 def home():
-    return render_template_string('''
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>News Sentiment Analysis</title>
-            <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-        </head>
-        <body>
-            <div class="wrapper">
-                <div class="box">
-                    <img src="{{ url_for('static', filename='pama.png') }}" alt="Logo" class="logo">
-                    <h1 class="unselectable">News Sentiment Analysis</h1>
-                    <form id="mainForm" method="post">
-                        <div class="news-url">
-                            <label for="url">News URL:</label>
-                            <input type="text" id="url" name="url" required>
-                            <label for="keyword">Keyword:</label>
-                            <input type="text" id="keyword" name="keyword" required>
-                        </div>
-                        <button type="submit" class="analyze" formaction="/extract">Extract</button>
-                    </form>
-                    <form id="mainForm2" method="get">
-                        <button type="submit" class="download" formaction="/download_sentence_sentiments">Download</button>
-                    </form>
-                </div>
-            </div>
-
-            <script>
-            function setActionAndSubmit(action) {
-                var form = document.getElementById('mainForm');
-                form.action = action;
-                form.submit();
-            }
-            </script>
-        </body>
-        </html>
-    ''')
+    return render_template('home.html')
 
 visited_links = set()  # Set untuk melacak link yang sudah dikunjungi
 
@@ -122,7 +84,7 @@ def extract():
 
             # Cek apakah ada link baru yang dikunjungi
             if not new_links_found:
-                return jsonify({'message': 'All links have been visited'}), 200
+                return jsonify({'message': 'There is no keyword you are looking for'}), 200
 
             # Simpan ke database
             try:
@@ -147,9 +109,10 @@ def extract():
         return jsonify({'error': error}), 400
     except Exception as e:
         error = str(e)
+        print(f"Error in extract function: {error}")
         return jsonify({'error': error}), 500
     
-    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited, error=error)
+    return render_template('extract_template.html', extracted_info=extracted_info, links_visited=links_visited)
     
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
