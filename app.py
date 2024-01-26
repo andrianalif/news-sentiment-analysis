@@ -49,7 +49,7 @@ def extract():
     keywords = keywords_input.split(',')  # Pisahkan kata kunci dengan koma
 
     if len(keywords) > 5:
-        return jsonify({'error': 'Maksimal 5 kata kunci yang diperbolehkan.'}), 400
+        return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
     
     try:
         response = requests.get(site_url)
@@ -112,7 +112,7 @@ def extract():
         print(f"Error in extract function: {error}")
         return jsonify({'error': error}), 500
     
-    return render_template('extract_template.html', extracted_info=extracted_info, links_visited=links_visited)
+    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited)
     
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
