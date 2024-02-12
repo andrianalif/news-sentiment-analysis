@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, send_file
 from flask_sqlalchemy import SQLAlchemy
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -9,9 +9,11 @@ import requests
 import re
 import csv
 import nltk
+import matplotlib.pyplot as plt
+import base64
 
 app = Flask(__name__, template_folder='templates')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///extract.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://@LAPTOP-4NMFI42A/extract_db?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -28,105 +30,6 @@ class ExtractedData(db.Model):
 # Buat tabel database jika belum ada dengan konteks aplikasi
 with app.app_context():
     db.create_all()
-    
-@app.route('/', methods=['GET'])
-def home():
-    return render_template('home.html')
-
-visited_links = set()  # Set untuk melacak link yang sudah dikunjungi
-
-def get_absolute_url(base, link):
-    if not link:
-        return None
-    if '://' not in link:
-        return urljoin(base, link)
-    return link
-
-@app.route('/extract', methods=['POST'])
-def extract():
-    site_url = request.form.get('url')
-    keywords_input = request.form.get('keyword').lower()
-    keywords = keywords_input.split(',')  # Pisahkan kata kunci dengan koma
-
-    if len(keywords) > 5:
-        return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
-    
-    try:
-        response = requests.get(site_url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            extracted_info = []
-            links_visited = 0  # Inisialisasi penghitung link
-            new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
-            error = None
-
-            for keyword in keywords:  # Iterasi melalui setiap kata kunci
-                links = soup.find_all('a', href=True)
-                for link in links:
-                    link_text = link.get_text(strip=True).lower()
-                    link_url = link['href']
-                    link_url = get_absolute_url(site_url, link_url)
-                    if link_url and keyword in link_text and link_url not in visited_links:
-                        new_links_found = True
-                        visited_links.add(link_url)  # Tandai link ini sebagai dikunjungi
-                        links_visited += 1  # Inkremen setiap kali mengunjungi link
-                        
-                        try:
-                            link_response = requests.get(link_url)
-                            if link_response.status_code == 200:
-                                link_soup = BeautifulSoup(link_response.content, 'html.parser')
-                                texts = ' '.join([t for t in link_soup.stripped_strings])
-                                if keyword in texts.lower():
-                                    extracted_info.append({'url': link_url, 'text': link_text, 'full_text': texts, 'keyword': keyword})
-                        except requests.exceptions.RequestException as e:
-                            # Handle exceptions for each link request here
-                            print(f"Failed to retrieve content from {link_url}: {e}")
-
-            # Cek apakah ada link baru yang dikunjungi
-            if not new_links_found:
-                return jsonify({'message': 'There is no keyword you are looking for'}), 200
-
-            # Simpan ke database
-            try:
-                for data in extracted_info:
-                    new_data = ExtractedData(url=data['url'], keyword=data['keyword'], content=data['full_text'])
-                    db.session.add(new_data)
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({'error': str(e)}), 500
-
-            # Tambahkan jumlah link yang dikunjungi ke response
-            return jsonify({
-                'extracted_info': extracted_info,
-                'links_visited': links_visited
-            })
-    except requests.exceptions.MissingSchema:
-        error = 'Invalid URL scheme provided.'
-        return jsonify({'error': error}), 400
-    except requests.exceptions.RequestException as e:
-        error = f'Failed to retrieve content from the URL: {e}'
-        return jsonify({'error': error}), 400
-    except Exception as e:
-        error = str(e)
-        print(f"Error in extract function: {error}")
-        return jsonify({'error': error}), 500
-    
-    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited)
-    
-@app.route('/data/<int:data_id>')
-def get_data(data_id):
-    data = ExtractedData.query.get_or_404(data_id)
-    return jsonify({
-        'url': data.url,
-        'keyword': data.keyword,
-        'content': data.content
-    })
-    
-@app.route('/show_data')
-def show_data():
-    all_data = ExtractedData.query.all()
-    return render_template('data.html', data_list=all_data)
 
 # Fungsi untuk membersihkan dan memisahkan teks menjadi kalimat
 def tokenize_sentences(text):
@@ -182,20 +85,147 @@ def clean_text(text, min_sentence_length=40):
 
     return cleaned_text
 
+def create_and_save_chart(positive_percentage, negative_percentage):
+    labels = ['Positive', 'Negative']
+    sizes = [positive_percentage, negative_percentage]
+    
+    plt.figure(figsize=(8, 8))
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=['green', 'red'])
+    plt.axis('equal')  # Pastikan lingkaran terlihat sebagai lingkaran
+    plt.title('Sentiment Percentage')
+    plt.savefig('sentiment_chart.png')  # Simpan grafik sebagai file gambar
+    plt.close()
+
+@app.route('/', methods=['GET'])
+def home():
+    return render_template('home.html')
+
+def get_absolute_url(base, link):
+    if not link:
+        return None
+    if '://' not in link:
+        return urljoin(base, link)
+    return link
+
+visited_links = set()
+
+@app.route('/extract', methods=['POST'])
+def extract():
+    site_url = request.form.get('url')
+    keywords_input = request.form.get('keyword').lower()
+    keywords = keywords_input.split(',')  # Pisahkan kata kunci dengan koma
+
+    if len(keywords) > 5:
+        return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
+    
+    try:
+        response = requests.get(site_url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            extracted_info = []
+            links_visited = 0  # Inisialisasi penghitung link
+            new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
+            error = None
+
+            for keyword in keywords:  # Iterasi melalui setiap kata kunci
+                links = soup.find_all('a', href=True)
+                for link in links:
+                    link_text = link.get_text(strip=True).lower()
+                    link_url = link['href']
+                    link_url = get_absolute_url(site_url, link_url)
+                    if link_url and keyword in link_text and link_url not in visited_links:
+                        new_links_found = True
+                        visited_links.add(link_url)  # Tandai link ini sebagai dikunjungi
+                        links_visited += 1  # Inkremen setiap kali mengunjungi link
+                        
+                        try:
+                            link_response = requests.get(link_url)
+                            if link_response.status_code == 200:
+                                link_soup = BeautifulSoup(link_response.content, 'html.parser')
+                                texts = ' '.join([t for t in link_soup.stripped_strings])
+                                if keyword in texts.lower():
+                                    # Simpan ke database
+                                    try:
+                                        new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
+                                        db.session.add(new_data)
+                                        db.session.commit()
+                                    except Exception as e:
+                                        db.session.rollback()
+                                        return jsonify({'error': str(e)}), 500
+                        except requests.exceptions.RequestException as e:
+                            # Handle exceptions for each link request here
+                            print(f"Failed to retrieve content from {link_url}: {e}")
+
+            # Cek apakah ada link baru yang dikunjungi
+            if not new_links_found:
+                return jsonify({'message': 'There is no keyword you are looking for'}), 200
+
+            # Tambahkan jumlah link yang dikunjungi ke response
+            return jsonify({
+                'extracted_info': extracted_info,
+                'links_visited': links_visited
+            })
+    except requests.exceptions.MissingSchema:
+        error = 'Invalid URL scheme provided.'
+        return jsonify({'error': error}), 400
+    except requests.exceptions.RequestException as e:
+        error = f'Failed to retrieve content from the URL: {e}'
+        return jsonify({'error': error}), 400
+    except Exception as e:
+        error = str(e)
+        print(f"Error in extract function: {error}")
+        return jsonify({'error': error}), 500
+    
+    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited)
+
+    
+@app.route('/data/<int:data_id>')
+def get_data(data_id):
+    data = ExtractedData.query.get_or_404(data_id)
+    return jsonify({
+        'url': data.url,
+        'keyword': data.keyword,
+        'content': data.content
+    })
+    
+@app.route('/show_data')
+def show_data():
+    all_data = ExtractedData.query.all()
+    return render_template('data.html', data_list=all_data)
+
 @app.route('/download_sentence_sentiments', methods=['GET', 'POST'])
 def download_sentence_sentiments():
     all_data = ExtractedData.query.all()
+    
+    # Gabungkan semua teks yang diekstraksi menjadi satu teks
     combined_text = ' '.join([clean_text(data.content) for data in all_data])
 
     # Pisahkan teks menjadi kalimat
     sentences = nltk.tokenize.sent_tokenize(combined_text)
 
     # Hitung sentimen
-    sentiment_counts = Counter([classify_sentiment(sentence) for sentence in sentences])
-    total_sentences = len(sentences)
+    positive_count = 0
+    negative_count = 0
+    for sentence in sentences:
+        sentiment = classify_sentiment(sentence)
+        if sentiment == 'positive':
+            positive_count += 1
+        elif sentiment == 'negative':
+            negative_count += 1
 
-    # Hitung persentase
-    sentiment_percentages = {sentiment: (count / total_sentences) * 100 for sentiment, count in sentiment_counts.items()}
+    total_sentences = len(sentences)
+    positive_percentage = (positive_count / total_sentences) * 100
+    negative_percentage = (negative_count / total_sentences) * 100
+
+    # Membuat dan menyimpan grafik
+    create_and_save_chart(positive_percentage, negative_percentage)
+
+    # Membaca gambar chart sebagai file biner
+    with open('sentiment_chart.png', 'rb') as f:
+        chart_data = f.read()
+
+    # Encode gambar chart sebagai Base64
+    chart_base64 = base64.b64encode(chart_data).decode('utf-8')
 
     # Membuat data CSV
     si = StringIO()
@@ -203,9 +233,14 @@ def download_sentence_sentiments():
     
     # Tulis persentase sentimen ke CSV
     cw.writerow(['Sentiment', 'Percentage'])
-    for sentiment, percentage in sentiment_percentages.items():
-        cw.writerow([sentiment, f"{round(percentage, 2)}%"])
+    cw.writerow(['Positive', f"{round(positive_percentage, 2)}%"])
+    cw.writerow(['Negative', f"{round(negative_percentage, 2)}%"])
     cw.writerow(['', ''])  # Baris kosong sebagai pemisah
+
+    # Tautkan gambar chart ke dalam file CSV
+    cw.writerow(['Chart Image'])
+    cw.writerow(['Chart', chart_base64])
+
 
     # Tulis kalimat dan sentimennya
     cw.writerow(['Sentence', 'Sentiment'])
@@ -215,6 +250,10 @@ def download_sentence_sentiments():
 
     output = si.getvalue()
     return Response(output, mimetype="text/csv", headers={"Content-disposition": "attachment; filename=sentence_sentiments.csv"})
+
+@app.route('/download_sentiment_chart', methods=['GET'])
+def download_sentiment_chart():
+    return send_file('sentiment_chart.png', as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
