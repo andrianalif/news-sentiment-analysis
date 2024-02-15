@@ -67,7 +67,7 @@ def clean_text(text, min_sentence_length=40):
     text = re.sub(r'http\S+|www\S+', '', text)
 
     # Menghilangkan kata-kata yang tidak diinginkan
-    unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT']
+    unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT', 'MINING.COM', 'Advertise']
     for phrase in unwanted_phrases:
         text = text.replace(phrase, '')
 
@@ -206,16 +206,29 @@ def download_sentence_sentiments():
     # Hitung sentimen
     positive_count = 0
     negative_count = 0
-    for sentence in sentences:
-        sentiment = classify_sentiment(sentence)
-        if sentiment == 'positive':
-            positive_count += 1
-        elif sentiment == 'negative':
-            negative_count += 1
+    
+    # Cek apakah ada kalimat yang diekstraksi
+    if sentences:
+        for sentence in sentences:
+            sentiment = classify_sentiment(sentence)
+            if sentiment == 'positive':
+                positive_count += 1
+            elif sentiment == 'negative':
+                negative_count += 1
 
-    total_sentences = len(sentences)
-    positive_percentage = (positive_count / total_sentences) * 100
-    negative_percentage = (negative_count / total_sentences) * 100
+        total_sentences = len(sentences)
+        
+        # Cek apakah total kalimat adalah nol
+        if total_sentences != 0:
+            positive_percentage = (positive_count / total_sentences) * 100
+            negative_percentage = (negative_count / total_sentences) * 100
+        else:
+            positive_percentage = 0
+            negative_percentage = 0
+    else:
+        # Jika tidak ada kalimat yang diekstraksi, atur persentase ke nol
+        positive_percentage = 0
+        negative_percentage = 0
 
     # Membuat dan menyimpan grafik
     create_and_save_chart(positive_percentage, negative_percentage)
@@ -226,7 +239,19 @@ def download_sentence_sentiments():
 
     # Encode gambar chart sebagai Base64
     chart_base64 = base64.b64encode(chart_data).decode('utf-8')
+    
+    # Mengumpulkan semua kata dari konten yang diekstraksi
+    all_words = ' '.join([clean_text(data.content) for data in all_data]).split()
 
+    # Hitung kemunculan kata-kata
+    word_count = Counter(all_words)
+
+    # Ambil 5 kata benda teratas
+    top_nouns = [word for word, count in word_count.items() if nltk.pos_tag([word])[0][1] == 'NN'][:5]
+    
+    # Ambil 5 kata sifat teratas
+    top_adjectives = [word for word, count in word_count.items() if nltk.pos_tag([word])[0][1] == 'JJ'][:5]
+    
     # Membuat data CSV
     si = StringIO()
     cw = csv.writer(si)
@@ -235,21 +260,40 @@ def download_sentence_sentiments():
     cw.writerow(['Sentiment', 'Percentage'])
     cw.writerow(['Positive', f"{round(positive_percentage, 2)}%"])
     cw.writerow(['Negative', f"{round(negative_percentage, 2)}%"])
-    cw.writerow(['', ''])  # Baris kosong sebagai pemisah
+    cw.writerow([])
+    
+    # Buat sheet baru untuk kata benda
+    cw.writerow(['Top Nouns'])
+    for noun in top_nouns:
+        cw.writerow([noun])
 
-    # Tautkan gambar chart ke dalam file CSV
-    cw.writerow(['Chart Image'])
-    cw.writerow(['Chart', chart_base64])
+    cw.writerow([])
 
-
+    # Buat sheet baru untuk kata sifat
+    cw.writerow(['Top Adjectives'])
+    for adjective in top_adjectives:
+        cw.writerow([adjective])
+        
+    cw.writerow([])
+    
     # Tulis kalimat dan sentimennya
     cw.writerow(['Sentence', 'Sentiment'])
     for sentence in sentences:
         sentiment = classify_sentiment(sentence)
         cw.writerow([sentence, sentiment])
 
-    output = si.getvalue()
-    return Response(output, mimetype="text/csv", headers={"Content-disposition": "attachment; filename=sentence_sentiments.csv"})
+    # Tautkan gambar chart ke dalam file CSV
+    cw.writerow([])  # Baris kosong sebagai pemisah
+    cw.writerow(['Chart Image'])
+    cw.writerow(['Chart', chart_base64])
+
+    # Reset posisi pointer di StringIO
+    si.seek(0)
+
+    # Mengonversi StringIO ke bytes
+    output_bytes = si.getvalue().encode('utf-8')
+
+    return Response(output_bytes, mimetype="text/csv", headers={"Content-disposition": "attachment; filename=sentence_sentiments.csv"})
 
 @app.route('/download_sentiment_chart', methods=['GET'])
 def download_sentiment_chart():
