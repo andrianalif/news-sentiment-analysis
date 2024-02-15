@@ -4,7 +4,8 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from io import StringIO
 from collections import Counter
-from textblob import TextBlob 
+from textblob import TextBlob
+from flask_executor import Executor
 import requests
 import re
 import csv
@@ -15,6 +16,9 @@ import base64
 app = Flask(__name__, template_folder='templates')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://@LAPTOP-4NMFI42A/extract_db?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['EXECUTOR_TYPE'] = 'thread'
+app.config['EXECUTOR_MAX_WORKERS'] = 2
+executor = Executor(app)
 db = SQLAlchemy(app)
 
 # Model Database
@@ -119,52 +123,8 @@ def extract():
         return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
     
     try:
-        response = requests.get(site_url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            extracted_info = []
-            links_visited = 0  # Inisialisasi penghitung link
-            new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
-            error = None
-
-            for keyword in keywords:  # Iterasi melalui setiap kata kunci
-                links = soup.find_all('a', href=True)
-                for link in links:
-                    link_text = link.get_text(strip=True).lower()
-                    link_url = link['href']
-                    link_url = get_absolute_url(site_url, link_url)
-                    if link_url and keyword in link_text and link_url not in visited_links:
-                        new_links_found = True
-                        visited_links.add(link_url)  # Tandai link ini sebagai dikunjungi
-                        links_visited += 1  # Inkremen setiap kali mengunjungi link
-                        
-                        try:
-                            link_response = requests.get(link_url)
-                            if link_response.status_code == 200:
-                                link_soup = BeautifulSoup(link_response.content, 'html.parser')
-                                texts = ' '.join([t for t in link_soup.stripped_strings])
-                                if keyword in texts.lower():
-                                    # Simpan ke database
-                                    try:
-                                        new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
-                                        db.session.add(new_data)
-                                        db.session.commit()
-                                    except Exception as e:
-                                        db.session.rollback()
-                                        return jsonify({'error': str(e)}), 500
-                        except requests.exceptions.RequestException as e:
-                            # Handle exceptions for each link request here
-                            print(f"Failed to retrieve content from {link_url}: {e}")
-
-            # Cek apakah ada link baru yang dikunjungi
-            if not new_links_found:
-                return jsonify({'message': 'There is no keyword you are looking for'}), 200
-
-            # Tambahkan jumlah link yang dikunjungi ke response
-            return jsonify({
-                'extracted_info': extracted_info,
-                'links_visited': links_visited
-            })
+        future = executor.submit(do_extraction_task, site_url, keywords)
+        return 'Extraction process started.', 200
     except requests.exceptions.MissingSchema:
         error = 'Invalid URL scheme provided.'
         return jsonify({'error': error}), 400
@@ -175,10 +135,55 @@ def extract():
         error = str(e)
         print(f"Error in extract function: {error}")
         return jsonify({'error': error}), 500
-    
-    return render_template('extract.html', extracted_info=extracted_info, links_visited=links_visited)
 
-    
+def do_extraction_task(site_url, keywords):
+    response = requests.get(site_url)
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, 'html.parser')
+        extracted_info = []
+        links_visited = 0  # Inisialisasi penghitung link
+        new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
+        error = None
+
+        for keyword in keywords:  # Iterasi melalui setiap kata kunci
+            links = soup.find_all('a', href=True)
+            for link in links:
+                link_text = link.get_text(strip=True).lower()
+                link_url = link['href']
+                link_url = get_absolute_url(site_url, link_url)
+                if link_url and keyword in link_text and link_url not in visited_links:
+                    new_links_found = True
+                    visited_links.add(link_url)  # Tandai link ini sebagai dikunjungi
+                    links_visited += 1  # Inkremen setiap kali mengunjungi link
+                    
+                    try:
+                        link_response = requests.get(link_url)
+                        if link_response.status_code == 200:
+                            link_soup = BeautifulSoup(link_response.content, 'html.parser')
+                            texts = ' '.join([t for t in link_soup.stripped_strings])
+                            if keyword in texts.lower():
+                                # Simpan ke database
+                                try:
+                                    new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
+                                    db.session.add(new_data)
+                                    db.session.commit()
+                                except Exception as e:
+                                    db.session.rollback()
+                                    return jsonify({'error': str(e)}), 500
+                    except requests.exceptions.RequestException as e:
+                        # Handle exceptions for each link request here
+                        print(f"Failed to retrieve content from {link_url}: {e}")
+
+        # Cek apakah ada link baru yang dikunjungi
+        if not new_links_found:
+            return jsonify({'message': 'There is no keyword you are looking for'}), 200
+
+        # Tambahkan jumlah link yang dikunjungi ke response
+        return jsonify({
+            'extracted_info': extracted_info,
+            'links_visited': links_visited
+        })
+
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
     data = ExtractedData.query.get_or_404(data_id)
@@ -267,13 +272,6 @@ def download_sentence_sentiments():
     for noun in top_nouns:
         cw.writerow([noun])
 
-    cw.writerow([])
-
-    # Buat sheet baru untuk kata sifat
-    cw.writerow(['Top Adjectives'])
-    for adjective in top_adjectives:
-        cw.writerow([adjective])
-        
     cw.writerow([])
     
     # Tulis kalimat dan sentimennya
