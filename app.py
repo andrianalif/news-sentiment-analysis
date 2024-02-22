@@ -71,7 +71,7 @@ def clean_text(text, min_sentence_length=40):
     text = re.sub(r'http\S+|www\S+', '', text)
 
     # Menghilangkan kata-kata yang tidak diinginkan
-    unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT', 'MINING.COM', 'Advertise']
+    unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT', 'MINING.COM', 'Advertise', "Buyer's", 'RSS', 'Education']
     for phrase in unwanted_phrases:
         text = text.replace(phrase, '')
 
@@ -95,9 +95,9 @@ def create_and_save_chart(positive_percentage, negative_percentage):
     
     plt.figure(figsize=(8, 8))
     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=['green', 'red'])
-    plt.axis('equal')  # Pastikan lingkaran terlihat sebagai lingkaran
+    plt.axis('equal')  
     plt.title('Sentiment Percentage')
-    plt.savefig('sentiment_chart.png')  # Simpan grafik sebagai file gambar
+    plt.savefig('sentiment_chart.png')  
     plt.close()
 
 @app.route('/', methods=['GET'])
@@ -124,7 +124,11 @@ def extract():
     
     try:
         future = executor.submit(do_extraction_task, site_url, keywords)
-        return 'Extraction process started.', 200
+        result = future.result()  # Menunggu hasil ekstraksi
+        if 'error' in result:
+            return jsonify(result), 500  # Jika ada error, kembalikan response dengan kode 500
+        else:
+            return jsonify({'message': result}), 200
     except requests.exceptions.MissingSchema:
         error = 'Invalid URL scheme provided.'
         return jsonify({'error': error}), 400
@@ -143,7 +147,7 @@ def do_extraction_task(site_url, keywords):
         extracted_info = []
         links_visited = 0  # Inisialisasi penghitung link
         new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
-        error = None
+        keyword_found = False  # Flag untuk melacak apakah ada keyword yang ditemukan
 
         for keyword in keywords:  # Iterasi melalui setiap kata kunci
             links = soup.find_all('a', href=True)
@@ -162,6 +166,7 @@ def do_extraction_task(site_url, keywords):
                             link_soup = BeautifulSoup(link_response.content, 'html.parser')
                             texts = ' '.join([t for t in link_soup.stripped_strings])
                             if keyword in texts.lower():
+                                keyword_found = True
                                 # Simpan ke database
                                 try:
                                     new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
@@ -174,15 +179,16 @@ def do_extraction_task(site_url, keywords):
                         # Handle exceptions for each link request here
                         print(f"Failed to retrieve content from {link_url}: {e}")
 
-        # Cek apakah ada link baru yang dikunjungi
+        # Cek apakah tidak ada link baru yang ditemukan
         if not new_links_found:
-            return jsonify({'message': 'There is no keyword you are looking for'}), 200
+            return 'All links have been visited'
 
-        # Tambahkan jumlah link yang dikunjungi ke response
-        return jsonify({
-            'extracted_info': extracted_info,
-            'links_visited': links_visited
-        })
+        # Cek apakah tidak ada keyword yang ditemukan
+        if not keyword_found:
+            return 'There is no keyword you are looking for'
+
+        # Jika tidak ada kondisi khusus yang terpenuhi, kembalikan pesan bahwa ekstraksi berhasil
+        return 'Extraction process completed successfully.'
 
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
@@ -253,10 +259,7 @@ def download_sentence_sentiments():
 
     # Ambil 5 kata benda teratas
     top_nouns = [word for word, count in word_count.items() if nltk.pos_tag([word])[0][1] == 'NN'][:5]
-    
-    # Ambil 5 kata sifat teratas
-    top_adjectives = [word for word, count in word_count.items() if nltk.pos_tag([word])[0][1] == 'JJ'][:5]
-    
+   
     # Membuat data CSV
     si = StringIO()
     cw = csv.writer(si)
@@ -265,7 +268,7 @@ def download_sentence_sentiments():
     cw.writerow(['Sentiment', 'Percentage'])
     cw.writerow(['Positive', f"{round(positive_percentage, 2)}%"])
     cw.writerow(['Negative', f"{round(negative_percentage, 2)}%"])
-    cw.writerow([])
+    cw.writerow([]) 
     
     # Buat sheet baru untuk kata benda
     cw.writerow(['Top Nouns'])
