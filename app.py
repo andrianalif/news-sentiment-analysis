@@ -6,12 +6,15 @@ from io import StringIO
 from collections import Counter
 from textblob import TextBlob
 from flask_executor import Executor
+from csv_utils import create_csv
+from sentiment_analysis import classify_sentiment
 import requests
 import re
 import csv
 import nltk
 import matplotlib.pyplot as plt
 import base64
+import pandas as pd
 
 app = Flask(__name__, template_folder='templates')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://@LAPTOP-4NMFI42A/extract_db?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server'
@@ -47,17 +50,6 @@ with app.app_context():
 def tokenize_sentences(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text).lower()
     return nltk.tokenize.sent_tokenize(text)
-
-# Fungsi untuk mengklasifikasikan sentimen
-def classify_sentiment(sentence):
-    analysis = TextBlob(sentence)
-    polarity = analysis.sentiment.polarity
-    # Tentukan ambang batas di mana di atasnya dianggap positif(1) dan di bawahnya negatif(-1)
-    threshold = 0
-    if polarity >= threshold:
-        return 'positive'
-    else:
-        return 'negative'
 
 def clean_text(text, min_sentence_length=40):
     # Identifikasi dan hilangkan teks di antara tag HTML khusus
@@ -97,7 +89,7 @@ def clean_text(text, min_sentence_length=40):
 
     return cleaned_text
 
-def create_and_save_chart(positive_percentage, negative_percentage):
+def create_and_save_chart(positive_percentage, negative_percentage, filename):
     labels = ['Positive', 'Negative']
     sizes = [positive_percentage, negative_percentage]
     
@@ -105,8 +97,15 @@ def create_and_save_chart(positive_percentage, negative_percentage):
     plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=['green', 'red'])
     plt.axis('equal')  
     plt.title('Sentiment Percentage')
-    plt.savefig('sentiment_chart.png')  
+    plt.savefig(filename)  # Simpan gambar dengan nama file yang diberikan
     plt.close()
+    
+def get_top_nouns(text, n=5):
+    words = nltk.word_tokenize(text)
+    tagged_words = nltk.pos_tag(words)
+    nouns = [word for word, pos in tagged_words if pos.startswith('NN')]
+    top_nouns = Counter(nouns).most_common(n)
+    return top_nouns
 
 @app.route('/', methods=['GET'])
 def home():
@@ -213,95 +212,63 @@ def show_data():
 
 @app.route('/download_sentence_sentiments', methods=['GET', 'POST'])
 def download_sentence_sentiments():
-    all_data = ExtractedData.query.all()
-    
-    # Gabungkan semua teks yang diekstraksi menjadi satu teks
-    combined_text = ' '.join([clean_text(data.content) for data in all_data])
+    # Ambil semua situs berita yang telah diekstraksi dari database
+    news_sites = ExtractedData.query.distinct(ExtractedData.url).all()
 
-    # Pisahkan teks menjadi kalimat
-    sentences = nltk.tokenize.sent_tokenize(combined_text)
+    # Lakukan iterasi untuk setiap situs berita
+    with pd.ExcelWriter('sentence_sentiments.xlsx') as writer:
+        for site in news_sites:
+            site_name = site.url.split('//')[-1].split('/')[0]  # Mendapatkan nama situs dari URL
+            site_data = ExtractedData.query.filter_by(url=site.url).all()
 
-    # Hitung sentimen
-    positive_count = 0
-    negative_count = 0
-    
-    # Cek apakah ada kalimat yang diekstraksi
-    if sentences:
-        for sentence in sentences:
-            sentiment = classify_sentiment(sentence)
-            if sentiment == 'positive':
-                positive_count += 1
-            elif sentiment == 'negative':
-                negative_count += 1
+            # Gabungkan semua teks yang diekstraksi dari situs berita menjadi satu teks
+            combined_text = ' '.join([clean_text(data.content) for data in site_data])
 
-        total_sentences = len(sentences)
-        
-        # Cek apakah total kalimat adalah nol
-        if total_sentences != 0:
-            positive_percentage = (positive_count / total_sentences) * 100
-            negative_percentage = (negative_count / total_sentences) * 100
-        else:
-            positive_percentage = 0
-            negative_percentage = 0
-    else:
-        # Jika tidak ada kalimat yang diekstraksi, atur persentase ke nol
-        positive_percentage = 0
-        negative_percentage = 0
+            # Pisahkan teks menjadi kalimat
+            sentences = nltk.tokenize.sent_tokenize(combined_text)
 
-    # Membuat dan menyimpan grafik
-    create_and_save_chart(positive_percentage, negative_percentage)
+            # Hitung sentimen
+            positive_count = sum(1 for sentence in sentences if classify_sentiment(sentence) == 'positive')
+            negative_count = sum(1 for sentence in sentences if classify_sentiment(sentence) == 'negative')
+            total_sentences = len(sentences)
+            if total_sentences != 0:
+                positive_percentage = (positive_count / total_sentences) * 100
+                negative_percentage = (negative_count / total_sentences) * 100
+            else:
+                positive_percentage = 0
+                negative_percentage = 0
 
-    # Membaca gambar chart sebagai file biner
-    with open('sentiment_chart.png', 'rb') as f:
-        chart_data = f.read()
+            # Membuat nama file untuk chart
+            chart_filename = f"{site_name}_sentiment_chart.png"
 
-    # Encode gambar chart sebagai Base64
-    chart_base64 = base64.b64encode(chart_data).decode('utf-8')
-    
-    # Mengumpulkan semua kata dari konten yang diekstraksi
-    all_words = ' '.join([clean_text(data.content) for data in all_data]).split()
+            # Membuat dan menyimpan grafik
+            create_and_save_chart(positive_percentage, negative_percentage, chart_filename)
 
-    # Hitung kemunculan kata-kata
-    word_count = Counter(all_words)
+            # Membaca gambar chart sebagai file biner
+            with open(chart_filename, 'rb') as f:
+                chart_data = f.read()
 
-    # Ambil 5 kata benda teratas
-    top_nouns = [word for word, count in word_count.items() if nltk.pos_tag([word])[0][1] == 'NN'][:5]
-   
-    # Membuat data CSV
-    si = StringIO()
-    cw = csv.writer(si)
-    
-    # Tulis persentase sentimen ke CSV
-    cw.writerow(['Sentiment', 'Percentage'])
-    cw.writerow(['Positive', f"{round(positive_percentage, 2)}%"])
-    cw.writerow(['Negative', f"{round(negative_percentage, 2)}%"])
-    cw.writerow([]) 
-    
-    # Buat sheet baru untuk kata benda
-    cw.writerow(['Top Nouns'])
-    for noun in top_nouns:
-        cw.writerow([noun])
+            # Encode gambar chart sebagai Base64
+            chart_base64 = base64.b64encode(chart_data).decode('utf-8')
 
-    cw.writerow([])
-    
-    # Tulis kalimat dan sentimennya
-    cw.writerow(['Sentence', 'Sentiment'])
-    for sentence in sentences:
-        sentiment = classify_sentiment(sentence)
-        cw.writerow([sentence, sentiment])
+            # Membuat data untuk CSV
+            csv_data = {
+                'Sentiment': ['Positive', 'Negative'],
+                'Percentage': [f"{round(positive_percentage, 2)}%", f"{round(negative_percentage, 2)}%"]
+            }
+            top_nouns = get_top_nouns(combined_text)
+            sentences_data = [{'Sentence': sentence, 'Sentiment': classify_sentiment(sentence)} for sentence in sentences]
 
-    # Tautkan gambar chart ke dalam file CSV
-    cw.writerow([])  # Baris kosong sebagai pemisah
-    cw.writerow(['Chart Image'])
-    cw.writerow(['Chart', chart_base64])
+            # Menulis data ke dalam file Excel dengan multiple sheets
+            pd.DataFrame(csv_data).to_excel(writer, sheet_name=f'{site_name} - Sentiment', index=False)
+            pd.DataFrame({'Top Nouns': [noun[0] for noun in top_nouns]}).to_excel(writer, sheet_name=f'{site_name} - Top Nouns', index=False)
+            pd.DataFrame(sentences_data).to_excel(writer, sheet_name=f'{site_name} - Sentences', index=False)
 
-    # Reset posisi pointer di StringIO
-    si.seek(0)
+            # Tautkan gambar chart ke dalam file Excel
+            chart_df = pd.DataFrame({'Chart': [chart_base64]})
+            chart_df.to_excel(writer, sheet_name=f'{site_name} - Chart Image', index=False)
 
-    # Mengonversi StringIO ke bytes
-    output_bytes = si.getvalue().encode('utf-8')
-
-    return Response(output_bytes, mimetype="text/csv", headers={"Content-disposition": "attachment; filename=sentence_sentiments.csv"})
+    return send_file('sentence_sentiments.xlsx', as_attachment=True)
 
 @app.route('/download_sentiment_chart', methods=['GET'])
 def download_sentiment_chart():
