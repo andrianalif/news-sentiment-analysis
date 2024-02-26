@@ -30,6 +30,14 @@ class ExtractedData(db.Model):
 
     def __repr__(self):
         return f'<ExtractedData {self.url}>'
+    
+# Definisikan model NewsSite di sini
+class NewsSite(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(2048), nullable=False, unique=True)
+
+    def __repr__(self):
+        return f'<NewsSite {self.url}>'
 
 # Buat tabel database jika belum ada dengan konteks aplikasi
 with app.app_context():
@@ -45,7 +53,7 @@ def classify_sentiment(sentence):
     analysis = TextBlob(sentence)
     polarity = analysis.sentiment.polarity
     # Tentukan ambang batas di mana di atasnya dianggap positif(1) dan di bawahnya negatif(-1)
-    threshold = 0.01
+    threshold = 0
     if polarity >= threshold:
         return 'positive'
     else:
@@ -115,7 +123,6 @@ visited_links = set()
 
 @app.route('/extract', methods=['POST'])
 def extract():
-    site_url = request.form.get('url')
     keywords_input = request.form.get('keyword').lower()
     keywords = keywords_input.split(',')  # Pisahkan kata kunci dengan koma
 
@@ -123,18 +130,17 @@ def extract():
         return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
     
     try:
-        future = executor.submit(do_extraction_task, site_url, keywords)
-        result = future.result()  # Menunggu hasil ekstraksi
-        if 'error' in result:
-            return jsonify(result), 500  # Jika ada error, kembalikan response dengan kode 500
-        else:
-            return jsonify({'message': result}), 200
-    except requests.exceptions.MissingSchema:
-        error = 'Invalid URL scheme provided.'
-        return jsonify({'error': error}), 400
-    except requests.exceptions.RequestException as e:
-        error = f'Failed to retrieve content from the URL: {e}'
-        return jsonify({'error': error}), 400
+        # Ambil semua URL situs berita dari database
+        news_sites = NewsSite.query.all()
+
+        for news_site in news_sites:
+            site_url = news_site.url
+            future = executor.submit(do_extraction_task, site_url, keywords)
+            result = future.result()  # Menunggu hasil ekstraksi
+            if 'error' in result:
+                return jsonify(result), 500  # Jika ada error, kembalikan response dengan kode 500
+
+        return jsonify({'message': 'Extraction process completed successfully.'}), 200
     except Exception as e:
         error = str(e)
         print(f"Error in extract function: {error}")
@@ -189,6 +195,7 @@ def do_extraction_task(site_url, keywords):
 
         # Jika tidak ada kondisi khusus yang terpenuhi, kembalikan pesan bahwa ekstraksi berhasil
         return 'Extraction process completed successfully.'
+
 
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
@@ -299,6 +306,26 @@ def download_sentence_sentiments():
 @app.route('/download_sentiment_chart', methods=['GET'])
 def download_sentiment_chart():
     return send_file('sentiment_chart.png', as_attachment=True)
+
+@app.route('/save_news_site', methods=['POST'])
+def save_news_site():
+    data = request.json
+    site_url = data.get('url')
+
+    if not site_url:
+        return jsonify({'error': 'Missing URL parameter'}), 400
+
+    # Cek apakah situs berita sudah ada dalam database
+    existing_site = NewsSite.query.filter_by(url=site_url).first()
+    if existing_site:
+        return jsonify({'error': 'News site already exists in the database'}), 400
+
+    # Simpan situs berita ke dalam database
+    new_site = NewsSite(url=site_url)
+    db.session.add(new_site)
+    db.session.commit()
+
+    return jsonify({'message': 'News site saved successfully'}), 201
 
 if __name__ == '__main__':
     app.run(debug=True)
