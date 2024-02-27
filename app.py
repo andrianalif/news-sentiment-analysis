@@ -212,11 +212,11 @@ def show_data():
 
 @app.route('/download_sentence_sentiments', methods=['GET', 'POST'])
 def download_sentence_sentiments():
-    # Ambil semua situs berita yang telah diekstraksi dari database
-    news_sites = ExtractedData.query.distinct(ExtractedData.url).all()
+    # Menggunakan group_by() bersama dengan distinct() untuk mendapatkan hasil unik
+    news_sites = db.session.query(ExtractedData.url).group_by(ExtractedData.url).all()
 
     # Lakukan iterasi untuk setiap situs berita
-    with pd.ExcelWriter('sentence_sentiments.xlsx') as writer:
+    with pd.ExcelWriter('data.xlsx') as writer:
         for site in news_sites:
             site_name = site.url.split('//')[-1].split('/')[0]  # Mendapatkan nama situs dari URL
             site_data = ExtractedData.query.filter_by(url=site.url).all()
@@ -268,7 +268,7 @@ def download_sentence_sentiments():
             chart_df = pd.DataFrame({'Chart': [chart_base64]})
             chart_df.to_excel(writer, sheet_name=f'{site_name} - Chart Image', index=False)
 
-    return send_file('sentence_sentiments.xlsx', as_attachment=True)
+    return send_file('data.xlsx', as_attachment=True)
 
 @app.route('/download_sentiment_chart', methods=['GET'])
 def download_sentiment_chart():
@@ -296,3 +296,4 @@ def save_news_site():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    plt.show()
