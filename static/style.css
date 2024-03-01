@@ -1,6 +1,8 @@
 body {
     background: #f1c40f;
     font-family: "Lucida Sans Unicode","Lucida Grande",sans-serif;
+    user-select: none;
+    overflow: hidden;
 }
 
 .wrapper {
@@ -124,6 +126,7 @@ body {
 
 .logo-submit{
     max-width: 50px;
+    user-select: none;
 }
 
 .navbar-brand{
@@ -135,20 +138,60 @@ body {
     color: black;
 }
 
-#loading-bar-container {
-    display: none;
-    width: 100%;
-    height: 4px; /* Ubah tinggi loading bar sesuai kebutuhan */
-    background-color: #f0f0f0; /* Warna latar belakang loading bar */
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 20px; /* Tambahkan jarak dari atas */
+.extract {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
 }
 
-#loading-bar {
-    width: 0;
-    height: 100%;
-    background-color: #2225b6; /* Warna awal loading bar */
-    transition: width 0.3s ease; /* Efek transisi untuk perubahan lebar */
+.extract .success-message {
+    color: #013880;
+    font-weight: bold;
+    font-size: 24px;
+    text-align: center;
+    pointer-events: none;
+    user-select: none;
 }
 
+.extract .button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.extract .back-button button,
+.extract .download-button button {
+    display: block;
+    width: fit-content;
+    border: none;
+    border-radius: 5px;
+    outline: none;
+    padding: 10px 20px;
+    margin: 10px 0; /* Ubah jarak atas dan bawah */
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: .5px;
+    box-shadow: 0 2px 3px rgba(0,0,0,.2);
+    transition: .5s;
+    border-width: 5px;
+}
+
+.extract .back-button button {
+    background-color: #013880;
+    color: #f1c40f;
+}
+
+.extract .back-button button:hover {
+    background-color: #0a2d5a;
+}
+
+.extract .download-button button {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.extract .download-button button:hover {
+    background-color: #45a049;
+}

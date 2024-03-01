@@ -24,7 +24,6 @@ app.config['EXECUTOR_MAX_WORKERS'] = 2
 executor = Executor(app)
 db = SQLAlchemy(app)
 
-# Model Database
 class ExtractedData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(2048), nullable=False)
@@ -33,8 +32,6 @@ class ExtractedData(db.Model):
 
     def __repr__(self):
         return f'<ExtractedData {self.url}>'
-    
-# Definisikan model NewsSite di sini
 class NewsSite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(2048), nullable=False, unique=True)
@@ -52,6 +49,9 @@ def tokenize_sentences(text):
     return nltk.tokenize.sent_tokenize(text)
 
 def clean_text(text, min_sentence_length=40):
+    # Konversi huruf kecil
+    text = text.lower()
+
     # Identifikasi dan hilangkan teks di antara tag HTML khusus
     title_match = re.search(r'<title[^>]*>(.*?)<\/title>', text, re.IGNORECASE | re.DOTALL)
     script_match = re.search(r'<script[^>]*>(.*?)<\/script>', text, re.IGNORECASE | re.DOTALL)
@@ -71,33 +71,42 @@ def clean_text(text, min_sentence_length=40):
     text = re.sub(r'http\S+|www\S+', '', text)
 
     # Menghilangkan kata-kata yang tidak diinginkan
-    unwanted_phrases = ['All rights reserved', 'All right reserved', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT', 'MINING.COM', 'Advertise', "Buyer's", 'RSS', 'Education']
+    unwanted_phrases = ['All rights reserved', 'All right reserved', 'Ad Feedback', 'ADVERTISEMENT SCROLL TO CONTINUE WITH CONTENT', 'MINING.COM', 'Advertise', "Buyer's", 'RSS', 'Education']
     for phrase in unwanted_phrases:
         text = text.replace(phrase, '')
 
     # Menghilangkan karakter non-alfabetik kecuali tanda baca penting
-    text = re.sub(r'[^a-zA-Z0-9.,;!?\'\`]', ' ', text)
+    # Tetap mempertahankan angka yang memberikan informasi
+    text = re.sub(r'[^a-zA-Z0-9.,;!?\'\`$]', ' ', text)
 
     # Tokenisasi kalimat
     sentences = nltk.tokenize.sent_tokenize(text)
 
     # Menghapus kalimat yang terlalu pendek yang mungkin tidak penting
-    sentences = [s for s in sentences if len(s) > min_sentence_length]
+    cleaned_sentences = []
+    for sentence in sentences:
+        if len(sentence) > min_sentence_length:
+            # Memeriksa sentimen kalimat
+            sentiment = classify_sentiment(sentence)
+            # Menambahkan kalimat ke list jika relevan (positif atau negatif)
+            if sentiment in ['positive', 'negative']:
+                cleaned_sentences.append(sentence)
 
-    # Mengganti whitespace berlebih dengan satu spasi
-    cleaned_text = ' '.join(sentences)
+    # Menggabungkan kalimat yang bersih menjadi teks yang dibersihkan
+    cleaned_text = ' '.join(cleaned_sentences)
 
     return cleaned_text
 
 def create_and_save_chart(positive_percentage, negative_percentage, filename):
     labels = ['Positive', 'Negative']
     sizes = [positive_percentage, negative_percentage]
+    colors = ['#008000', '#FF0000']
     
     plt.figure(figsize=(8, 8))
-    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=['green', 'red'])
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
     plt.axis('equal')  
     plt.title('Sentiment Percentage')
-    plt.savefig(filename)  # Simpan gambar dengan nama file yang diberikan
+    plt.savefig(filename)
     plt.close()
     
 def get_top_nouns(text, n=5):
@@ -129,7 +138,6 @@ def extract():
         return jsonify({'error': 'Maximum 5 keywords allowed.'}), 400
     
     try:
-        # Ambil semua URL situs berita dari database
         news_sites = NewsSite.query.all()
 
         for news_site in news_sites:
@@ -137,9 +145,9 @@ def extract():
             future = executor.submit(do_extraction_task, site_url, keywords)
             result = future.result()  # Menunggu hasil ekstraksi
             if 'error' in result:
-                return jsonify(result), 500  # Jika ada error, kembalikan response dengan kode 500
+                return jsonify(result), 500
 
-        return jsonify({'message': 'Extraction process completed successfully.'}), 200
+        return render_template('extract_result.html', message='Extraction process completed successfully.'), 200
     except Exception as e:
         error = str(e)
         print(f"Error in extract function: {error}")
@@ -149,21 +157,16 @@ def do_extraction_task(site_url, keywords):
     response = requests.get(site_url)
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, 'html.parser')
-        extracted_info = []
-        links_visited = 0  # Inisialisasi penghitung link
-        new_links_found = False  # Flag untuk melacak apakah ada link baru yang dikunjungi
-        keyword_found = False  # Flag untuk melacak apakah ada keyword yang ditemukan
+        extracted_data = []  # Inisialisasi daftar untuk menyimpan data yang diekstraksi
 
-        for keyword in keywords:  # Iterasi melalui setiap kata kunci
+        for keyword in keywords:
             links = soup.find_all('a', href=True)
             for link in links:
                 link_text = link.get_text(strip=True).lower()
                 link_url = link['href']
                 link_url = get_absolute_url(site_url, link_url)
                 if link_url and keyword in link_text and link_url not in visited_links:
-                    new_links_found = True
-                    visited_links.add(link_url)  # Tandai link ini sebagai dikunjungi
-                    links_visited += 1  # Inkremen setiap kali mengunjungi link
+                    visited_links.add(link_url)
                     
                     try:
                         link_response = requests.get(link_url)
@@ -171,30 +174,14 @@ def do_extraction_task(site_url, keywords):
                             link_soup = BeautifulSoup(link_response.content, 'html.parser')
                             texts = ' '.join([t for t in link_soup.stripped_strings])
                             if keyword in texts.lower():
-                                keyword_found = True
-                                # Simpan ke database
-                                try:
-                                    new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
-                                    db.session.add(new_data)
-                                    db.session.commit()
-                                except Exception as e:
-                                    db.session.rollback()
-                                    return jsonify({'error': str(e)}), 500
+                                new_data = ExtractedData(url=link_url, keyword=keyword, content=texts)
+                                db.session.add(new_data)
+                                db.session.commit()
+                                extracted_data.append(new_data)  # Tambahkan data yang diekstraksi ke daftar
                     except requests.exceptions.RequestException as e:
-                        # Handle exceptions for each link request here
                         print(f"Failed to retrieve content from {link_url}: {e}")
 
-        # Cek apakah tidak ada link baru yang ditemukan
-        if not new_links_found:
-            return 'All links have been visited'
-
-        # Cek apakah tidak ada keyword yang ditemukan
-        if not keyword_found:
-            return 'There is no keyword you are looking for'
-
-        # Jika tidak ada kondisi khusus yang terpenuhi, kembalikan pesan bahwa ekstraksi berhasil
-        return 'Extraction process completed successfully.'
-
+        return extracted_data
 
 @app.route('/data/<int:data_id>')
 def get_data(data_id):
@@ -296,4 +283,3 @@ def save_news_site():
 
 if __name__ == '__main__':
     app.run(debug=True)
-    plt.show()

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraction Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="extract">
+        <div class="message success-message">
+            <p>{{ message }}</p>
+        </div>
+        <div class="button-container">
+            <div class="download-button">
+                <button onclick="window.location.href='/download_sentence_sentiments'">Download</button>
+            </div>
+            <div class="back-button">
+                <button onclick="window.location.href='/'">Back</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
