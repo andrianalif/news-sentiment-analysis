@@ -161,7 +161,6 @@ body {
     align-items: center;
 }
 
-.extract .back-button button,
 .extract .download-button button {
     display: block;
     width: fit-content;
@@ -178,14 +177,23 @@ body {
     border-width: 5px;
 }
 
-.extract .back-button button {
+.extract .back-icon {
+    position: absolute;
+    font-size: 35px;
+    top: 25px;
+    left: 35px;
+    color: #013880;
+    cursor: pointer;
+}
+
+/* .extract .back-button button {
     background-color: #013880;
     color: #f1c40f;
 }
 
 .extract .back-button button:hover {
     background-color: #0a2d5a;
-}
+} */
 
 .extract .download-button button {
     background-color: #4CAF50;

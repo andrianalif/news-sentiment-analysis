@@ -13,6 +13,6 @@ def classify_sentiment(sentence):
     return sentiment
 
 # Contoh penggunaan
-sentence = "indiscriminate killing  the united nations is urging an investigation into indiscriminate israeli fire that killed half of a family in gaza after a cnn report on the attack was published wednesday."
+sentence = "more than 100 people were killed during the chaos, where israeli troops opened fire and triggered panic as hungry palestinian civilians were gathering around food aid trucks, palestinian officials and eyewitnesses said."
 sentiment = classify_sentiment(sentence)
 print(f"Sentimen: {sentiment}")  # Output: positive
