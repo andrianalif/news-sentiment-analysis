@@ -186,15 +186,6 @@ body {
     cursor: pointer;
 }
 
-/* .extract .back-button button {
-    background-color: #013880;
-    color: #f1c40f;
-}
-
-.extract .back-button button:hover {
-    background-color: #0a2d5a;
-} */
-
 .extract .download-button button {
     background-color: #4CAF50;
     color: white;
