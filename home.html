@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikipedia Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="wrapper">
+        <div class="box">
+            <img src="{{ url_for('static', filename='pama.png') }}" alt="Logo" class="logo">
+            <h1 class="unselectable">Wikipedia Analysis</h1>
+            <form id="mainForm" method="post" action="/search">
+                <div class="news-url">
+                    <label for="keyword">Keyword:</label>
+                    <input type="text" id="keyword" name="keyword" required>
+                </div>
+                <button type="submit" class="analyze">Search</button>
+            </form>
+        </div>
+    </div>
+
+    <header class="title">
+        <h1>Welcome to the hub of insights - where data meets clarity.</h1>
+    </header>
+
+    <iframe src="http://localhost:3000/public/dashboard/334b73b5-370f-4217-87f3-2179762affbf" frameborder="0" width="800" height="600" allowtransparency></iframe>
+</body>
+</html>
