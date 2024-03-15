@@ -4,15 +4,17 @@ Berikut adalah salah satu pekerjaan saya ketika magang di PT Pamapersada Nusanta
 
 # Home Page
 
-Pada tampilan Home Page terdapat input News URL yang berfungsi untuk mencari situs berita yang ingin dicari dan Keyword berfungsi untuk mencari suatu kata yang diinginkan.
-![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/6f444370-6d8a-493a-a7f4-2ec57106672c)
+Pada tampilan Home Page terdapat input Keyword yang ada pada situs wikipedia.
+![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/12b2c382-d821-4275-b2b9-4831ff1099c5)
 
-# Extract Page
+# Database Page
 
-Semua link yang memiliki keyword akan dikunjungi, kemudian mengextract semua teks yang ada di dalam link berita tersebut dan akan di tampilkan jumlah link berita yang dikunjungi.
-![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/b775b439-776c-48b2-bae6-579b787ac53c)
+Berikut ini adalah tampilan database yang tersimpan pada SQL Server. Struktur databasenya ada id, url, sentence dan sentiment.
+![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/a59c8452-1cb9-4619-8d06-3ff2023adb1d)
 
-# CSV File Display
+# Dashboard Page
 
-Berikut adalah isi file csv yang sudah di download, data yang di dapatkan adalah hasil semua extract text dari situs berita dan keyword yang di inputkan yang tersimpan dalam database. Data pada file CSV ini sudah dibersihkan ketika mendownloadnya sehingga menyisakan kalimat-kalimat utuh.
-![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/f408d544-728b-4c56-8588-4466f010d9d8)
+Untuk memvisualisasikan data, saya menggunakan metabase dan mengembbednya ke dalam website.
+![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/b9d20df0-1659-491f-a6e7-bb61a79b5f42)
+
+![image](https://github.com/andrianalif/news-sentiment-analysis/assets/93751046/7dbfe241-abb4-4fcb-b85b-bab429d0c72e)
